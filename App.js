@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Pressable, StyleSheet, Image, Text, TextInput, View, Button, ScrollView,TouchableOpacity} from 'react-native';
+import { Pressable, StyleSheet, Image, Text, TextInput, View, Button, ScrollView,TouchableOpacity, Linking, ListView} from 'react-native';
 import {useState, useEffect} from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import * as SQLite from "expo-sqlite";
@@ -43,9 +43,16 @@ function HomeScreen({ navigation }) {
   const onChangeID = newID => {
     setPressed(false);
     setID((newID));
+    }
+
+  const onChangeSearch = newSearch => {
+    setPressed(false);
+    setSearch((newSearch));
   }
+  
 
   const img = require('./assets/marine-life.jpg')
+  const url = ('https://marineliferescueproject.org/')
 
   return (
     <View style={{justifyContent: 'center' }}>
@@ -65,6 +72,7 @@ function HomeScreen({ navigation }) {
         </Pressable>
 
         <Image source={img} style={styles.image}></Image>
+        <Text style={styles.link} onPress={() => Linking.openURL(url)}>{url}</Text>
 
     </View>
   );
@@ -76,7 +84,7 @@ function Items() {
   useEffect(() => {
     db.transaction((tx) => {
       tx.executeSql(
-        `select key, species, age, date(itemDate) as itemDate from history order by itemDate desc;`,
+        `select key, species, age, date(itemDate) as itemDate from records order by itemDate desc;`,
         [],
         (_, { rows: { _array } }) => setItems(_array)
       );
@@ -102,16 +110,64 @@ function TrackerScreen({ route, navigation }) {
   const {ID} = route.params;
   const [species, setSpecies] = useState(null);
   const [age, setAge] = useState(null);
+  const [yourRescue, setyourRescue] = useState(null);
+  const [forceUpdate, forceUpdateId] = useForceUpdate();
+  const [search, setSearch] = useState(null);
+  const [yourSearch, setYourSearch] = useState(null);
+  const [average, setAverage] = useState(null);
+  
+    useEffect(() => {
+      db.transaction((tx) => {
+        //tx.executeSql(
+          //"drop table records;"
+        //);
+        tx.executeSql(
+          "create table if not exists records (key integer primary key not null,species not null,age int, itemDate real);"
+        );
+      });
+    }, []);
+  
+    const add = (age, species) => {
+      if (age === "" || age === null || species === "" || species === null) {
+        return false;
+      } else {
+        db.transaction(
+          (tx) => {
+            tx.executeSql("insert into records (species,age,itemDate) values (?,?,julianday('now'))",[species, age]);
+            tx.executeSql("select * from records", [], (_, { rows }) =>
+              console.log(JSON.stringify(rows))
+            );
+          },
+          null,
+          forceUpdate
+        )};
+        const yourRescue = "You rescued a " + species + " that is " + age + " years old.";
+        setyourRescue(yourRescue);
+      }
 
-  const add = (age, species) => {
-    if (age === "" || age === null || species === "" || species === null) {
-      return false;
-    }
-  }
+      const searchSpecies = (search) => {
+        if (search === "" || search === null) {
+          return false;
+        } else {
+          console.log(search);
+          db.transaction(
+            (tx) => {
+              tx.executeSql("select avg(age) as average from records where species = ?", [search],
+              (_, { rows: { _array } }) => setAverage(_array)
+              );
+            
+            },
+            null,
+            forceUpdate
+          )};
+          console.log(average[0].average);
+        }
+      
+
 
   return (
     <View>
-    <Text style={styles.text}>Employee Information</Text>
+    <Text style={styles.text3}>Employee Information</Text>
     <Text style={styles.text2}>Name: {name}</Text>
     <Text style={styles.text2}>ID: {ID}</Text>
     <ScrollView style={styles.text}>
@@ -128,11 +184,24 @@ function TrackerScreen({ route, navigation }) {
                 value={age}
               />
             <TouchableOpacity 
-              onPress={() => {add(species, age),setSpecies(null),setAge(null)}} style={styles.button}>
-              <Text style={styles.buttonText}>Add Rescue</Text>
+              onPress={() => {add(age, species),setSpecies(null),setAge(null)}} style={styles.button}>
+              <Text style={styles.buttontext}>Add Rescue</Text>
             </TouchableOpacity>
-          <Items   
-          />
+            <TextInput
+          onChangeText={(search) => setSearch(search)}
+          placeholder='Search for a rescued species'
+          style={styles.input}
+          value={search}
+            />
+            <TouchableOpacity 
+              onPress={() => {searchSpecies(search)}} style={styles.button}>
+              <Text style={styles.buttontext}>Search</Text>
+            </TouchableOpacity>
+            <Text style={styles.rescue}>{yourRescue}</Text>
+          <Items/>
+
+            <Text style={styles.rescue}>{average ? "The average age of a " + search + " is " + average[0].average + " years old.": null}</Text>
+            
            </ScrollView>
     </View>
   );
@@ -140,30 +209,7 @@ function TrackerScreen({ route, navigation }) {
 
 const Stack = createNativeStackNavigator();
 
-export default function App({age, species}) {
-  const [text, setText] = useState(null);
-  const [forceUpdate, forceUpdateId] = useForceUpdate();
-  
-    useEffect(() => {
-      db.transaction((tx) => {
-        tx.executeSql(
-          "create table if not exists history (key integer primary key not null,species not null,age int, itemDate real);"
-        );
-      });
-    }, []);
-  
-
-      db.transaction(
-        (tx) => {
-          tx.executeSql("insert into history (species,age,itemDate) values (?,?,?,julianday('now'))",[species, age]);
-          tx.executeSql("select * from history", [], (_, { rows }) =>
-            console.log(JSON.stringify(rows))
-          );
-        },
-        null,
-        forceUpdate
-      );
-  
+export default function App() {
 
   return (
     <NavigationContainer>
@@ -198,6 +244,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  heading: {
+    textAlign: 'center',
+  },
+  history: {
+    textAlign: 'center',
+  },
   top: {
     fontSize: 40,
     textAlign: 'center'
@@ -210,9 +262,12 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 35,
     paddingTop: 20,
-    textAlign: 'left',
-    paddingLeft: 20
   },
+  text3: {
+    fontSize: 35,
+    paddingTop: 20,
+    textAlign: 'center',
+    },
   textbox: {
     fontSize: 25,
     textAlign: 'left',
@@ -220,23 +275,32 @@ const styles = StyleSheet.create({
     marginTop: 40
   },
   button: {
-    alignContent:'center',
-    marginBottom: 40,
-    padding: 8,
-    justifyContent: 'center',
     backgroundColor: '#4ADEDE',
-    fontSize: 50,
-    marginLeft: 140,
-    marginRight: 155,
-    marginTop: 30,
+      padding: 10,
+      borderRadius: 3,
+      marginBottom: 30,
+      marginTop: 15,
   },
   buttontext: {
-    fontSize: 25,
     color: '#FFFFFF'
   },
   image: {
     width: 380,
     height: 300,
     marginLeft: 7,
+  },
+  link: {
+    color: '#4ADEDE',
+    textAlign: 'center',
+    fontWeight: 'bold',
+    fontStyle: 'italic',
+    paddingTop: 40,
+  },
+  rescue: {
+    fontSize: 20,
+    textAlign: 'center',
+  },
+  input: {
+    textAlign: 'center'
   }
 });
